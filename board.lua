@@ -12,6 +12,14 @@ function Board:new(width, height)
     self.score = 0
     self.moves = 0
     self.isAnimating = false
+    
+    -- Difficulty parameters
+    self.level = 1
+    self.candyTypes = 6
+    self.targetScore = 1000
+    self.maxMoves = 50
+    self.levelUpAnimation = 0
+    
     return self
 end
 
@@ -21,7 +29,7 @@ function Board:initialize()
         for x = 1, self.width do
             local candyType
             repeat
-                candyType = math.random(1, 6)
+                candyType = math.random(1, self.candyTypes)
             until not self:wouldCreateMatch(x, y, candyType)
             
             self.grid[y][x] = Candy:new(x, y, candyType)
@@ -164,17 +172,33 @@ end
 function Board:processMatches(matches)
     self.isAnimating = true
     
+    -- Add screen shake for big matches
+    if _G.addScreenShake then
+        local totalCandies = 0
+        for _, match in ipairs(matches) do
+            totalCandies = totalCandies + match.length
+        end
+        local shakeIntensity = math.min(8, totalCandies * 0.5)
+        _G.addScreenShake(shakeIntensity)
+    end
+    
     -- Remove matched candies
     for _, match in ipairs(matches) do
+        -- Calculate dynamic score based on difficulty and match length
+        local baseScore = 10
+        local difficultyMultiplier = 1 + (self.level * 0.2)
+        local lengthBonus = (match.length - 3) * 5
+        local totalScore = math.floor((baseScore + lengthBonus) * difficultyMultiplier)
+        
         if match.type == 'horizontal' then
             for i = 0, match.length - 1 do
                 self.grid[match.y][match.x + i] = nil
-                self.score = self.score + 10
+                self.score = self.score + totalScore
             end
         else -- vertical
             for i = 0, match.length - 1 do
                 self.grid[match.y + i][match.x] = nil
-                self.score = self.score + 10
+                self.score = self.score + totalScore
             end
         end
     end
@@ -212,14 +236,84 @@ function Board:fillEmptySpaces()
     for y = 1, self.height do
         for x = 1, self.width do
             if not self.grid[y][x] then
-                self.grid[y][x] = Candy:new(x, y, math.random(1, 6))
+                self.grid[y][x] = Candy:new(x, y, math.random(1, self.candyTypes))
             end
         end
     end
 end
 
+function Board:checkLevelProgression()
+    if self.score >= self.targetScore then
+        self:nextLevel()
+    elseif self.moves >= self.maxMoves then
+        self:gameOver()
+    end
+end
+
+function Board:nextLevel()
+    -- Store level history
+    local historyEntry = {
+        level = self.level,
+        score = self.score,
+        moves = self.moves,
+        candyTypes = self.candyTypes
+    }
+    
+    -- Trigger level complete popup
+    if _G.showPopupMessage then
+        local message = string.format(
+            "Level %d Complete!\n\nScore: %d\nMoves Used: %d\nCandy Types: %d\n\nGet ready for Level %d!",
+            self.level, self.score, self.moves, self.candyTypes, self.level + 1
+        )
+        _G.showPopupMessage("󰮯 LEVEL COMPLETE!", message)
+    end
+    
+    -- Add visual effects
+    if _G.addScreenShake then
+        _G.addScreenShake(10)
+    end
+    if _G.addGlowEffect then
+        _G.addGlowEffect()
+    end
+    
+    self.level = self.level + 1
+    self.candyTypes = math.max(4, 6 - math.floor(self.level / 2))
+    self.targetScore = self.level * 1000
+    self.maxMoves = math.max(20, 50 - self.level * 3)
+    self.moves = 0
+    self.levelUpAnimation = 1.0
+    
+    -- Add to history
+    if _G.levelHistory then
+        table.insert(_G.levelHistory, historyEntry)
+        -- Keep only last 10 levels
+        if #_G.levelHistory > 10 then
+            table.remove(_G.levelHistory, 1)
+        end
+    end
+end
+
+function Board:gameOver()
+    -- Reset game or show game over screen
+    self.level = 1
+    self.candyTypes = 6
+    self.targetScore = 1000
+    self.maxMoves = 50
+    self.score = 0
+    self.moves = 0
+    self:initialize()
+end
+
 function Board:update(dt)
-    -- Animation updates can go here
+    -- Update level up animation
+    if self.levelUpAnimation > 0 then
+        self.levelUpAnimation = self.levelUpAnimation - dt * 2
+        if self.levelUpAnimation < 0 then
+            self.levelUpAnimation = 0
+        end
+    end
+    
+    self:checkLevelProgression()
 end
 
 return Board
