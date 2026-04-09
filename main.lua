@@ -7,6 +7,10 @@ local boardOffsetX = 50
 local boardOffsetY = 140
 local font
 
+-- git parcticing
+-- lol
+-- i know i learnd git
+
 -- Pop-up message system
 local popupMessage = {
 	active = false,
